@@ -6,6 +6,7 @@
 
     "notify" : {
         "sentencedTarget" : "Sentenced %s",
+        "jailYourself": "You cannot jail yourself!",
         "targetAlreadySentenced" : "Player has already been sentenced!",
         "targetDoesntExist" : "Could not find a player with that ID!",
         "notPolice" : "You are not a police officer!",

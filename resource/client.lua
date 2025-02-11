@@ -11,6 +11,8 @@ local currentArea = nil
 local showText = false
 local taskActive = false
 local taskPoint = false
+local taskFinished = false 
+local escaped = false 
 local progress = lib.progressBar
 lib.locale()
 
@@ -23,30 +25,37 @@ local function showSentencingMenu()
     if not sentenceMenu then 
         return 
     end 
-    
+
+    local localId = GetPlayerServerId(PlayerId())
     local playerId = sentenceMenu[1]
     local sentence = sentenceMenu[2]
+
+    if playerId == localId then
+        stevo_lib.Notify(locale("notify.jailYourself"), 'warning', 3000)
+        return
+    end
 
     TriggerServerEvent('stevo_communityservice:sentencePlayer', playerId, sentence)
 end 
 
 local function createTask(taskName, taskLocation, taskAnimation, taskScenario, taskProp, taskDuration)
     taskActive = true
+    taskFinished = false 
 
     taskPoint = lib.points.new({ 
         coords = vec3(taskLocation.x, taskLocation.y, taskLocation.z + 0.5), 
-        distance = 100, 
+        distance = 25, 
         nearby = function(point)
             currentArea = point 
             local color = config.interaction.markerColor
             DrawMarker(21, point.coords.x, point.coords.y, point.coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, color.r, color.g, color.b, color.a, false, true, 2, true, false, false, false)
-            
+
             if point.isClosest and point.currentDistance <= 1.5 then
                 if not showText then
                     showText = true
                     lib.showTextUI(locale('textUI.startTask'), { position = config.interaction.textUI.position })
                 end
-                if IsControlJustPressed(0, 38) then
+                if IsControlJustPressed(0, 38) and not taskFinished then  
                     lib.hideTextUI()
 
                     if taskAnimation then 
@@ -71,7 +80,8 @@ local function createTask(taskName, taskLocation, taskAnimation, taskScenario, t
                             },
                         }) then 
                             ClearPedTasksImmediately(cache.ped)
-                            taskActive = false  -- mark task as complete
+                            taskFinished = true 
+                            taskPoint:remove()
                         end
                     else 
                         if progress({ 
@@ -82,7 +92,8 @@ local function createTask(taskName, taskLocation, taskAnimation, taskScenario, t
                             disable = { car = true }
                         }) then 
                             ClearPedTasksImmediately(cache.ped)
-                            taskActive = false  -- mark task as complete
+                            taskFinished = true 
+                            taskPoint:remove()
                         end
                     end 
                 end
@@ -94,10 +105,62 @@ local function createTask(taskName, taskLocation, taskAnimation, taskScenario, t
         onExit = function()
             lib.hideTextUI()
             ClearPedTasks(cache.ped)
+            taskPoint:remove() 
         end
     })
 
     return true
+end
+
+local function assignTasks()
+    if actions < 0 then 
+        return 
+    end 
+
+    local taskCount = #config.tasks
+    LocalPlayer.state:set('stevo_comserv', actions, true)
+
+    CreateThread(function()
+        local tasksCompleted = 0
+        while actions > 0 do 
+            tasksCompleted = tasksCompleted + 1
+            local taskIndex = (tasksCompleted - 1) % taskCount + 1
+            local task = config.tasks[taskIndex]
+            local taskName = task.name
+            local taskLocation = task.coords
+            local taskAnimation = task.animation
+            local taskScenario = task.scenario
+            local taskProp = task.prop
+            local taskDuration = task.duration or 7000
+
+            currentArea = { coords = vec3(taskLocation.x, taskLocation.y, taskLocation.z + 0.5) }
+
+            createTask(taskName, taskLocation, taskAnimation, taskScenario, taskProp, taskDuration)
+            
+            while not taskFinished do 
+                Wait(500) 
+            end
+            
+            actions = actions - 1 
+            LocalPlayer.state:set('stevo_comserv', actions, true)
+        
+            if actions > 0 then 
+                stevo_lib.Notify(locale("notify.finishedTask", actions), "warning", 3000)
+            else 
+                stevo_lib.Notify(locale("notify.finished"), "success", 3000)
+                isSentenced = false 
+                TriggerServerEvent('stevo_communityservice:finishedService')
+
+                if config.teleportBack then 
+                    SetEntityCoords(cache.ped, config.returnLocation.x, config.returnLocation.y, config.returnLocation.z, true, false, false, false)
+                end
+
+                if config.switchOutfit then 
+                    stevo_lib.SetOutfit(false)
+                end
+            end 
+        end 
+    end)
 end
 
 local function assignTasks()
@@ -125,8 +188,9 @@ local function assignTasks()
 
             createTask(taskName, taskLocation, taskAnimation, taskScenario, taskProp, taskDuration)
 
-            while taskActive do 
-                Wait(500)
+            -- Wait until task is finished
+            while not taskFinished do 
+                Wait(500)  -- Wait while the task is active
             end
             
             actions = actions - 1 
@@ -135,7 +199,6 @@ local function assignTasks()
             if actions > 0 then 
                 stevo_lib.Notify(locale("notify.finishedTask", actions), "warning", 3000)
             else 
-                taskPoint:remove()
                 stevo_lib.Notify(locale("notify.finished"), "success", 3000)
                 isSentenced = false 
                 TriggerServerEvent('stevo_communityservice:finishedService')
@@ -151,6 +214,7 @@ local function assignTasks()
         end 
     end)
 end
+
 
 local function teleportToCommunityService()
     SetEntityCoords(cache.ped, config.coords.x, config.coords.y, config.coords.z, true, false, false, false)
@@ -186,6 +250,8 @@ local function loadCommunityService()
                     if distance > 50 then 
                         SetEntityCoords(cache.ped, currentArea.coords.x, currentArea.coords.y, currentArea.coords.z, true, false, false, false)
                         stevo_lib.Notify(locale("notify.sentBack"), 'error', 3000)
+                        actions = actions + 1
+                        LocalPlayer.state:set('stevo_comserv', actions, true)
                     end 
                 end
             end

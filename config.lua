@@ -1,6 +1,6 @@
 return {
 
-    dropCheaters = true,
+    dropCheaters = false,
     policeJob = 'police',
     coords = vector3(2208.68, 5591.96, 53.85),
 
@@ -29,16 +29,12 @@ return {
             },
             prop = {
                 model = "prop_tool_shovel2"
-            }
-        },
-        {
-            name = "Blow Leaves",
-            coords = vector3(495.85, 5585.11, 794.0),
-            scenario = "WORLD_HUMAN_GARDENER_LEAF_BLOWER",
+            },
+            duration = 7000,
         },
     },
 
-    switchOutfit = true,
+    switchOutfit = false,
     Uniforms = {
         [0] = {
             ['arms'] = 5,
